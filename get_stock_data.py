@@ -18,8 +18,10 @@ def print_hello():
 
 if __name__ == '__main__':
     ticker_code = input('Input the stock name: ')
-    end_date = datetime.now()
-    start_date = end_date - relativedelta(years = 3)
+    # end_date = datetime.now()
+    end_date = input('Input last date (YYYY-MM-DD):')
+    end_date = datetime.strptime(end_date, '%Y-%m-%d')
+    start_date = end_date - relativedelta(years = 5)
 
     # get_stock_data(ticker_code, start_date, end_date)
     get_stock_data(ticker_code, start_date, end_date)
