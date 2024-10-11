@@ -1,2 +1,4 @@
 mlruns/
 folder_trees.txt
+backup_db/
+credentials.json
