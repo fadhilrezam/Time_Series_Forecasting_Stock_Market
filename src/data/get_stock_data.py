@@ -16,7 +16,7 @@ def get_stock_data(ticker_code, start_date, end_date):
         logging.info('Error While Take Stock Data, Please Check the ticker code is right')
         ticker_code.replace("^","")
     else:
-        df_stock_data.to_csv(f'../../data/raw/{ticker_code.replace("^","").lower()} stock_prices_data({start_date.date()} - {end_date.date()}).csv')
+        df_stock_data.to_csv(f'../../data/raw/{ticker_code.replace("^","").lower()}_stock_prices_data({start_date.date()} - {end_date.date()}).csv')
         logging.info(f'{ticker_code} stock data saved successfully at ../../data/raw')
 
 if __name__ == '__main__':
@@ -28,4 +28,4 @@ if __name__ == '__main__':
 
     get_stock_data(ticker_code, start_date, end_date)
 
-    logging.info('Process successfully completed.')
+    logging.info('Process Completed')
