@@ -1,71 +1,88 @@
-import logging
-import pandas as pd
-import matplotlib.pyplot as plt
-import json
-from prophet import Prophet
-import mlflow
-import mlflow.prophet
-from mlflow.models.signature import infer_signature
-from sklearn.metrics import mean_absolute_error, mean_squared_error, root_mean_squared_error
+from logger import logging
+from exception import CustomException
+import sys
+import os
 
-logging.basicConfig(
-    filename = '../../logs/train_model.log',
-    level = logging.INFO,
-    format = '%(asctime)s - %(levelname)s - %(message)s')
+import pandas as pd
+import numpy as np
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.metrics import root_mean_squared_error
+import mlflow
+
+import warnings
+warnings.filterwarnings("ignore")
+
 
 def load_preprocessed_dataset():
+    logging.info('Train, Test and Exog dataframe initialization')
     try:
-        train = pd.read_csv('../../data/processed/df_train.csv', parse_dates = ['ds'])
-        test = pd.read_csv('../../data/processed/df_test.csv', parse_dates = ['ds'])
-        logging.info('Data Loaded Successfully')
-        return train, test
-    except Exception as e:
-        logging.info(f'Error Loading Data: {e}')
+        folder_path = os.path.abspath(os.path.join(os.getcwd(),"..","data","processed"))
+        df = pd.read_csv(os.path.join(folder_path, 'df.csv'), index_col=0)
+        df_train = pd.read_csv(os.path.join(folder_path, 'df_train.csv'), index_col=0)
+        df_test = pd.read_csv(os.path.join(folder_path, 'df_test.csv'), index_col=0)
+        exog_train = pd.read_csv(os.path.join(folder_path, 'exog_train.csv'), index_col=0)
+        exog_test =pd.read_csv(os.path.join(folder_path, 'exog_test.csv'), index_col=0)
 
-def train_model(df_train, df_test):
+        logging.info('Train and test dataframe loaded successfully')
+        return df, df_train, df_test, exog_train, exog_test
+    except Exception as e:
+        logging.error(CustomException(e,sys))
+        raise CustomException(e,sys)
+
+def train_model(df_train, df_test, exog_train, exog_test):
+    logging.info('Training Model Initialization')
     try:
-        json_path = '../../notebooks/best_params.json'
-        with open(json_path, 'r') as f:
-            params = json.load(f)
-        prophet_model = Prophet(seasonality_mode='multiplicative').add_regressor('y_gspc')
-        # prophet_model = Prophet(**params).add_regressor('y_gspc')
-        future = df_test[['ds']].copy()
-        future['y_gspc'] = df_test['y_gspc']
-        prophet_model.fit(df_train)
-        df_predicted = prophet_model.predict(future)[['ds','yhat']]
-        signature = infer_signature(df_test, df_predicted)
-        rmse = root_mean_squared_error(df_test['y'],df_predicted['yhat'])
-        logging.info('Model Trained Successfully')
-        return prophet_model, signature, df_predicted, rmse
+        order = (0,0,1)
+        model_arima = ARIMA(df_train['close_log_diff'], order = order, exog = exog_train).fit() 
+        y_pred_arima = model_arima.get_forecast(steps = len(df_test), exog = exog_test).predicted_mean.values
+
+        df_pred_arima = pd.DataFrame({
+            'date': df_test.index,
+            'close_pred': y_pred_arima}, index = df_test.index)
+
+        close_pred_reversed = df_pred_arima['close_pred'].cumsum() + df_train['close_log'].iloc[-1]
+        close_pred_original_scale = np.exp(close_pred_reversed)
+        df_pred_arima['close_pred_original_scale']= close_pred_original_scale
+
+        rmse_arima = root_mean_squared_error(df_test['close_log_diff'], df_pred_arima['close_pred'])
+        rmse_arima_original_scale = root_mean_squared_error(df_test['close'], df_pred_arima['close_pred_original_scale'])
+        return df_pred_arima, model_arima, order, rmse_arima, rmse_arima_original_scale
     except Exception as e:
-        logging.info(f'Error Training Model: {e}')
-
-def plot_model ():
-    plt.figure(figsize=(15,5))
-    plt.plot(df_test['ds'], df_test['y'], label = 'Actual Price')
-    plt.plot(df_predicted['ds'],df_predicted['yhat'], label = 'Prophet - Predicted Price')
-    plt.title('Comparison of Actual and Predicted Price')
-    plt.legend()
-    plt.savefig('../visualizations/Comparison of Actual and Predicted Price.png')
-
-def extract_params(model): #Extract prophet model parameter only with int, float, str and bool data type
-    try:
-        params_dict = vars(model)
-        params = {key:value for key, value in params_dict.items() if isinstance(value, (int, float, str, bool))}
-        logging.info(f'Prophet Params Successfully Extracted')
-        return params
-    except Exception as e:
-        logging.info(f'Error Extracting Parameters: {e}')
-
+        logging.error(CustomException(e,sys))
+        raise CustomException(e,sys)
 if __name__ == '__main__':
-    with mlflow.start_run() as run:
-        df_train, df_test = load_preprocessed_dataset()
-        prophet_model, signature,df_predicted, rmse_score = train_model(df_train, df_test)
-        plot_model()
-        params = extract_params(prophet_model)
+    try:
 
-        mlflow.prophet.log_model(prophet_model, artifact_path = 'prophet_model',signature = signature)
-        mlflow.log_params(params)
-        mlflow.log_metric('RMSE Score', rmse_score)
+        # Create a new MLflow Experiment
+        mlflow.set_experiment("MLflow Stock Forecast with ARIMA")
 
-        logging.info('Process Completed')
+        # Start an MLflow run
+        with mlflow.start_run():
+            logging.info("Loading preprocessed dataset")
+            df, df_train, df_test, exog_train, exog_test = load_preprocessed_dataset()
+
+            logging.info("Starting model training")
+            df_pred_arima, model_arima, order, rmse_arima, rmse_arima_original_scale = train_model(df_train, df_test, exog_train, exog_test)
+
+            mlflow.log_param("ARIMA_order", order)
+            
+            # Log AR and MA parameters
+            for i, ar_param in enumerate(model_arima.arparams):
+                mlflow.log_param(f"AR_param_{i+1}", ar_param)
+            for i, ma_param in enumerate(model_arima.maparams):
+                mlflow.log_param(f"MA_param_{i+1}", ma_param)
+    
+            # Log the loss metric
+            mlflow.log_metric("RMSE Score Scaled", rmse_arima)
+            mlflow.log_metric("RMSE Score Original Scale", rmse_arima_original_scale)
+
+
+            # Set a tag that we can use to remind ourselves what this run was for
+            mlflow.set_tag("Training Info", "ARIMA Model For NVIDIA stock price")
+
+            logging.info("Training pipeline completed successfully")
+    
+    except Exception as e:
+            logging.error(CustomException(e,sys))
+            raise CustomException(e,sys)
+    

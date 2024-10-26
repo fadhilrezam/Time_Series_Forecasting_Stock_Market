@@ -1,50 +1,74 @@
-import pandas as pd
-import logging
-from sklearn.preprocessing import MinMaxScaler
+from logger import logging
+from exception import CustomException
+import sys
+import os
 
-logging.basicConfig(
-    filename = '../../logs/data_preprocess.log',
-    level = logging.INFO,
-    format = '%(asctime)s - %(levelname)s - %(message)s')
+import pandas as pd
+import numpy as np
+
+
+
     
 def load_dataset():
+    logging.info('Dataframe initialization')
     try:
-        nvda = pd.read_csv('../../data/raw/nvda_stock_prices_data(2019-10-05 - 2024-10-05).csv')
-        gspc = pd.read_csv('../../data/raw/gspc_stock_prices_data(2019-10-05 - 2024-10-05).csv')
-        return nvda, gspc
+        folder_path = os.path.abspath(os.path.join(os.getcwd(),"..","data","raw"))
+        file_name = 'nvda_stock_prices.csv'
+        file_path = os.path.join(folder_path,file_name)
+        df = pd.read_csv(file_path)[['Date','Close']]
+        logging.info('Dataframe successfully loaded')
+        return df
     except Exception as e:
-        print(e)
+        logging.error(CustomException(e,sys))
+        raise CustomException(e, sys)
 
-def preprocess_dataset(dataframe):
-    dataframe = dataframe[['Date', 'Close']]
-    dataframe = dataframe.rename(columns = {'Date': 'ds', 'Close': 'y'})
-    dataframe['ds'] = pd.to_datetime(dataframe['ds'])
-    return dataframe
+def preprocess_dataset(df):
+    # Lower column name, replace whitespace and extract year, month and day from date column as new columns or features
+    df.columns = df.columns.str.lower().str.replace(' ','_')
+    df['date'] = pd.to_datetime(df['date'])
+    df['year'] = df['date'].dt.year
+    df['month'] = df['date'].dt.month
+    df['day'] = df['date'].dt.day
 
-def merge_dataset(df_nvda, df_gspc):
-    # date_threshold = '2023-12-31'
-    date_threshold = '2024-07-31'
-    df = pd.merge(df_nvda,df_gspc[['ds','y']],on = 'ds', how = 'left', suffixes = ('','_gspc'))
-    df_train = df[df['ds'] <= date_threshold]
-    df_test = df[df['ds'] > date_threshold]
-    return df_train, df_test
+    #Transform dataframe with transformation log and differencing to stabilze the data range and remove any trends
+    df['close_log'] = np.log(df['close'])
+    df['close_log_diff'] = df['close_log'].diff()
+    df.dropna(inplace = True)
 
-# def normalize_dataset(df_train, df_test):
-#     scaler = MinMaxScaler()
-#     df_train_scaled = df_train[['ds']].copy()
-#     df_test_scaled = df_test[['ds']].copy()
-#     df_train_scaled[['y','y_gspc']] = scaler.fit_transform(df_train[['y','y_gspc']])
-#     df_test_scaled[['y','y_gspc']] = scaler.transform(df_test[['y','y_gspc']])
-#     return df_train_scaled, df_test_scaled
+    #Feature engineering with adding lag, rolling window, year, month and day column
+    df['lag_1'] = df['close_log_diff'].shift(1)
+    df['lag_2'] = df['close_log_diff'].shift(2)
+    df['lag_3'] = df['close_log_diff'].shift(3)
+    df['rolling_mean'] = df['close_log_diff'].rolling(window = 5).mean()
+    df.dropna(inplace = True)
 
-def store_train_test_data (df_train, df_test):
-    df_train.to_csv('../../data/processed/df_train.csv', index = False)
-    df_test.to_csv('../../data/processed/df_test.csv', index = False)
+    # Split dataframe and to train test split with 80/20 distribution
+    # Store other features as exogenous variables
+    df.set_index('date', inplace = True)
+    n_rows = int(len(df)*0.8)
+    df_train = df.iloc[:n_rows]
+    df_test = df.iloc[n_rows:]
+    exog_train = df_train[['lag_1', 'lag_2', 'lag_3', 'rolling_mean', 'year', 'month', 'day']]
+    exog_test = df_test[['lag_1', 'lag_2', 'lag_3', 'rolling_mean', 'year', 'month', 'day']]
 
+    return n_rows, df_train, df_test, exog_train, exog_test
+
+def store_dataframe(df, df_train, df_test, exog_train, exog_test):
+    logging.info('Prepare to store train and test data')
+    try:
+        folder_path = os.path.abspath(os.path.join(os.getcwd(),"..","data","processed")) 
+        df.to_csv(os.path.join(folder_path, 'df.csv'))
+        df_train.to_csv(os.path.join(folder_path, 'df_train.csv'))
+        df_test.to_csv(os.path.join(folder_path, 'df_test.csv'))
+        exog_train.to_csv(os.path.join(folder_path, 'exog_train.csv'))
+        exog_test.to_csv(os.path.join(folder_path, 'exog_test.csv'))
+        logging.info(f'All Dataframe Successfully stored in {folder_path}')
+    except Exception as e:
+        logging.error(CustomException(e,sys))
+        raise CustomException(e, sys)
+    
 if __name__ == '__main__':
-    df_nvda, df_gspc = load_dataset()
-    df_nvda = preprocess_dataset(df_nvda)
-    df_gspc = preprocess_dataset(df_gspc)
-    df_train, df_test = merge_dataset(df_nvda, df_gspc)
-    # df_train_scaled, df_test_scaled = normalize_dataset(df_train, df_test)
-    store_train_test_data(df_train, df_test)
+    df = load_dataset()
+    n_rows, df_train, df_test, exog_train, exog_test = preprocess_dataset(df)
+    store_dataframe(df, df_train, df_test, exog_train, exog_test)
+
