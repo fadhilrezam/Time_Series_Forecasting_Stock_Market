@@ -1,56 +1,67 @@
-import os
-from prophet.serialize import model_from_json
-# from src.exception import CustomException
-# from src.logger import logging
+from logger import logging
+from exception import CustomException
 import sys
-from datetime import datetime, timedelta
+import os
+import joblib
 import pandas as pd
-import holidays
-from prophet import Prophet
-import yfinance as yf
+from datetime import datetime
+import numpy as np
 
 
-def load_model():
-    json_path = os.path.join(os.path.dirname(__file__),'..','..','config')
-    file_name = 'json_prophet_model.json'
-    file_path = os.path.join(json_path, file_name)
-    print(file_path)
+def load_model_and_exog():
+    model_path = os.path.abspath(os.path.join(os.getcwd(),"..",'config'))
+    exog_path = os.path.abspath(os.path.join(os.getcwd(),"..",'data','processed'))
+    model_name = 'arima_model.pkl'
+    exog_name = 'exog_future.csv'
+    model_path = os.path.join(model_path, model_name)
+    exog_path = os.path.join(exog_path, exog_name)
     try:
-        if os.path.exists(file_path):
-            with open (file_path, 'r') as f: 
-                model = model_from_json(f.read())
-            return model
+        logging.info('Load Model and Base Future Exogenous Variables')
+        if os.path.exists(model_path) and os.path.exists(exog_path):
+            model_arima = joblib.load(model_path)
+            df_exog = pd.read_csv(exog_path, index_col = 0)
+            return model_arima, df_exog
         else:
-            print('file does not exist')
+            logging.error('Model Path or Exog Path not found')
     except Exception as e:
-        print(e)
+        logging.error(CustomException(e,sys))
+        raise CustomException(e, sys)
 
-def get_date():
-    date_min = datetime(2024, 10, 6) 
-    date_threshold = datetime (2024, 10, 5)
-    date_max = date_min + timedelta(days=7)
-    us_holidays = holidays.US()
+def predict_future(start_date, end_date, model_arima, df_exog):
+    try:
+        logging.info('Prepare exogenous dataframe for future predictions')
+        #Prepare exog dataframe based on date range
+        all_dates = pd.date_range(start = start_date, end = end_date, freq = 'B')
+        exog_future = pd.DataFrame({
+            'lag_1': df_exog['lag_1'].values.tolist() * len(all_dates),
+            'lag_2': df_exog['lag_2'].values.tolist()* len(all_dates),
+            'lag_3': df_exog['lag_3'].values.tolist()* len(all_dates),
+            'rolling_mean':  df_exog['rolling_mean'].values.tolist()* len(all_dates),
+            'year': all_dates.year,
+            'month': all_dates.month,
+            'day': all_dates.day
+        })
 
-    if date_min < date_threshold:
-        print('Date not allowed, please raise the date over 5th of October, 2024')
-    else:
-        future_date = yf.download('^GSPC',start =date_min, end = date_max + timedelta(days=1)).reset_index().rename(columns = {'Date': 'ds', 'Close': 'y_gspc'})[['ds','y_gspc']]
-        future_date = future_date[~(future_date.ds.isin(us_holidays) | future_date.ds.dt.dayofweek.isin([5,6]))] #exclude holidays date (include Saturday and Sunday)
-        return future_date
+        logging.info('Prediction Initialization')
+        y_pred = model_arima.get_forecast(steps = len(all_dates), exog = exog_future).predicted_mean.values
 
-def predict_future(model, future_date):
-    df_predicted = model.predict(future_date)
-    return df_predicted
+        df_pred = pd.DataFrame({
+            'close_pred': y_pred}, index = all_dates)
 
-def plot_future(model,df_predicted):
-    fig = model.plot(df_predicted)
-    fig.show()
+        close_pred_reversed = df_pred['close_pred'].cumsum() + df_exog['close_log'].iloc[-1]
+        close_pred_original_scale = round(np.exp(close_pred_reversed),3)
+        df_pred['close_pred_original_scale']= close_pred_original_scale
+        logging.info('Prediction Completed')
+
+        return df_pred[['close_pred_original_scale']]
+    
+    except Exception as e:
+        logging.error(CustomException(e,sys))
+        raise CustomException(e,sys)
+
 
 if __name__ == '__main__':
-    model = load_model()
-    print(model)
-    future_date = get_date()
-    # df_predicted = model.predict(future_date)
-    df_predicted = predict_future(model, future_date)
-    print(df_predicted[['ds','yhat']])
-    plot_future(model,df_predicted)
+    start_date = datetime(2024,10,5)
+    end_date = datetime(2024,10,12)
+    model_arima, exog_future = load_model_and_exog()
+    df_pred = predict_future(start_date, end_date, model_arima, exog_future)

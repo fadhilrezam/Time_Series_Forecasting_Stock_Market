@@ -36,9 +36,11 @@ def preprocess_dataset(df):
     df.dropna(inplace = True)
 
     #Feature engineering with adding lag, rolling window, year, month and day column
-    df['lag_1'] = df['close_log_diff'].shift(1)
-    df['lag_2'] = df['close_log_diff'].shift(2)
-    df['lag_3'] = df['close_log_diff'].shift(3)
+    # df['lag_1'] = df['close_log_diff'].shift(1)
+    # df['lag_2'] = df['close_log_diff'].shift(2)
+    # df['lag_3'] = df['close_log_diff'].shift(3)
+    for lag in range(1, 4):
+        df[f'lag_{lag}'] = df['close_log_diff'].shift(lag)
     df['rolling_mean'] = df['close_log_diff'].rolling(window = 5).mean()
     df.dropna(inplace = True)
 
@@ -50,8 +52,9 @@ def preprocess_dataset(df):
     df_test = df.iloc[n_rows:]
     exog_train = df_train[['lag_1', 'lag_2', 'lag_3', 'rolling_mean', 'year', 'month', 'day']]
     exog_test = df_test[['lag_1', 'lag_2', 'lag_3', 'rolling_mean', 'year', 'month', 'day']]
+    exog_future = df[['lag_1', 'lag_2', 'lag_3', 'rolling_mean', 'year', 'month', 'day','close_log']].iloc[[-1]]
 
-    return n_rows, df_train, df_test, exog_train, exog_test
+    return df_train, df_test, exog_train, exog_test, exog_future
 
 def store_dataframe(df, df_train, df_test, exog_train, exog_test):
     logging.info('Prepare to store train and test data')
@@ -62,6 +65,7 @@ def store_dataframe(df, df_train, df_test, exog_train, exog_test):
         df_test.to_csv(os.path.join(folder_path, 'df_test.csv'))
         exog_train.to_csv(os.path.join(folder_path, 'exog_train.csv'))
         exog_test.to_csv(os.path.join(folder_path, 'exog_test.csv'))
+        exog_future.to_csv(os.path.join(folder_path, 'exog_future.csv'))
         logging.info(f'All Dataframe Successfully stored in {folder_path}')
     except Exception as e:
         logging.error(CustomException(e,sys))
@@ -69,6 +73,9 @@ def store_dataframe(df, df_train, df_test, exog_train, exog_test):
     
 if __name__ == '__main__':
     df = load_dataset()
-    n_rows, df_train, df_test, exog_train, exog_test = preprocess_dataset(df)
+    df_train, df_test, exog_train, exog_test, exog_future = preprocess_dataset(df)
     store_dataframe(df, df_train, df_test, exog_train, exog_test)
+    # print([exog_future]*10)
+    
+
 

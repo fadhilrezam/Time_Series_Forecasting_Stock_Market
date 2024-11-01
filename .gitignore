@@ -3,3 +3,8 @@ folder_trees.txt
 backup_db/
 credentials.json
 logs/
+.vscode
+__pycache__
+Dockerfile
+myenv/
+notebooks/eda_and_experiment.ipynb

@@ -2,9 +2,9 @@ from logger import logging
 from exception import CustomException
 import sys
 
-from data.data_ingestion import get_stock_data
-from data.data_preprocess import load_dataset, preprocess_dataset
-from data.train_model import train_model
+from .data_ingestion import get_stock_data
+from .data_preprocess import load_dataset, preprocess_dataset
+from .train_model import train_model
 
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
