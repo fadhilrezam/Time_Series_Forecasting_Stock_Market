@@ -9,11 +9,6 @@ import pandas as pd
 from datetime import datetime
 app = Flask(__name__)
 
-
-@app.route('/')
-def hello_world():
-    return ('hallo')
-
 @app.route('/predict', methods = ['GET'])
 def prediction():
     try:
