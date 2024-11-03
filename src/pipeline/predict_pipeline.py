@@ -61,7 +61,7 @@ def predict_future(start_date, end_date, model_arima, df_exog):
 
 
 if __name__ == '__main__':
-    start_date = datetime(2024,10,5)
-    end_date = datetime(2024,10,12)
+    # start_date = datetime(2024,10,5)
+    # end_date = datetime(2024,10,12)
     model_arima, exog_future = load_model_and_exog()
     df_pred = predict_future(start_date, end_date, model_arima, exog_future)
