@@ -7,8 +7,9 @@ from dateutil.relativedelta import relativedelta
 import requests
 import urllib.parse
 import pandas as pd
-import plotly.express as px
+# import plotly.express as px
 
+st.set_page_config(layout="wide")
 
 min_value_start = datetime.date(2024,10,5)
 min_value_end = min_value_start + relativedelta(days = 1)
@@ -39,15 +40,17 @@ json_response = fetch_data(url)
 if json_response:
     df = pd.DataFrame.from_dict(json_response, orient = 'index').rename(columns = {'close_pred_original_scale':'Predicted Close Price'})
     st.dataframe(df)
-    fig = px.line(x = df.index.astype('str'), y = df['Predicted Close Price'])
-    fig.update_traces(
-        mode = 'markers+lines',
-        hovertemplate=None)
-    fig.update_layout(
-        xaxis_tickformat='%b %d',
-        xaxis_title='Date',
-        yaxis_title = 'Predicted Close Price')
-    st.plotly_chart(fig, use_container_width=True)
+    # fig = px.line(x = df.index.astype('str'), y = df['Predicted Close Price'])
+    # fig.update_traces(
+    #     mode = 'markers+lines',
+    #     hovertemplate=None)
+    # fig.update_layout(
+    #     xaxis_tickformat='%b %d',
+    #     xaxis_title='Date',
+    #     yaxis_title = 'Predicted Close Price')
+    # st.plotly_chart(fig, use_container_width=True)
+    st.line_chart(df, x_label = 'Date', y = 'Predicted Close Price')
+    
 
 
 
