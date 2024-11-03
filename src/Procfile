@@ -1,0 +1,2 @@
+web: python backend.py
+streamlit: streamlit frontend.py --server.port $PORT --server.address 0.0.0.0
