@@ -7,6 +7,7 @@ from dateutil.relativedelta import relativedelta
 import requests
 import urllib.parse
 import pandas as pd
+import json
 # import plotly.express as px
 
 st.set_page_config(layout="wide")
@@ -22,33 +23,26 @@ data = {
 
 main_url = "http://localhost:8000/predict?"
 url = main_url + urllib.parse.urlencode(data)
-st.write(url)
 
-# with st.spinner('Please Wait....'):
-@st.cache_data(show_spinner= False)
-def fetch_data(url):
-    r = requests.get(url, json = data)
-    try:
-        if r.status_code == 200:
-            return r.json()
-    except Exception as e:
-        st.error(CustomException(e,sys))
 
-json_response = fetch_data(url)
-# st.success("Done, Here are the results")
+# @st.cache_data(show_spinner= False)
+# def fetch_data(url):
+#     r = requests.get(url, json = data)
+#     try:
+#         if r.status_code == 200:
+#             return r.json()
+#     except Exception as e:
+#         st.error(CustomException(e,sys))
+
+# json_response = fetch_data(url)
+# # st.success("Done, Here are the results")
+
+json_response = requests.get(url, json = data).json()
+st.write(json_response)
 
 if json_response:
     df = pd.DataFrame.from_dict(json_response, orient = 'index').rename(columns = {'close_pred_original_scale':'Predicted Close Price'})
     st.dataframe(df)
-    # fig = px.line(x = df.index.astype('str'), y = df['Predicted Close Price'])
-    # fig.update_traces(
-    #     mode = 'markers+lines',
-    #     hovertemplate=None)
-    # fig.update_layout(
-    #     xaxis_tickformat='%b %d',
-    #     xaxis_title='Date',
-    #     yaxis_title = 'Predicted Close Price')
-    # st.plotly_chart(fig, use_container_width=True)
     st.line_chart(df, x_label = 'Date', y = 'Predicted Close Price')
     
 
