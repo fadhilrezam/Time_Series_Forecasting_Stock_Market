@@ -3,4 +3,4 @@ logs/
 .vscode
 __pycache__
 myenv/
-
+notebooks/

@@ -1,10 +1,10 @@
-from logger import logging
-from exception import CustomException
+from src.logger import logging
+from src.exception import CustomException
 import sys
 
-from data.data_ingestion import get_stock_data
-from data.data_preprocess import load_dataset, preprocess_dataset
-from data.train_model import train_model
+from src.data_transform.data_ingestion import get_stock_data
+from src.data_transform.data_preprocess import load_dataset, preprocess_dataset
+from src.data_transform.train_model import train_model, save_model
 
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -35,16 +35,21 @@ def run_pipeline(ticker_code, start_date, end_date):
             1. Transform and normalize the dataframe such as transformation_log, differencing 
             2. Feature engineering which create new feautres such as lag and rolling window mean
             3. Split into train, test and prepare exogenous variables'''
-        df_train, df_test, exog_train, exog_test, exog_future = preprocess_dataset(df)
+        df, df_train, df_test, exog_train, exog_test, exog_future = preprocess_dataset(df)
     except Exception as e:
         logging.error(CustomException(e,sys))
         raise CustomException(e, sys)
-
-        
+    
     try:
         '''train_model function
         -> function that used to train the model using ARIMA and store all the importan infortmation such as order, ar, ma parameters and rmse score in MLflow for tracking purposes'''
         df_pred_arima, model_arima, order, rmse_arima, rmse_arima_original_scale = train_model(df_train, df_test, exog_train, exog_test)
+    except Exception as e:
+        logging.error(CustomException(e,sys))
+        raise CustomException(e, sys)
+
+    try:
+        save_model(model_arima)
     except Exception as e:
         logging.error(CustomException(e,sys))
         raise CustomException(e, sys)
